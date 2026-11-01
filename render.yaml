@@ -1,0 +1,8 @@
+# Render.com blueprint: New > Blueprint, pick this repository; or New > Web Service with the same settings.
+services:
+  - type: web
+    name: bzaround-relay
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python relay.py
