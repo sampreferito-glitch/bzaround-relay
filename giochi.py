@@ -31,7 +31,7 @@ import random
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GIOCHI = ("foto", "quadrifogli", "rigori")
+GIOCHI = ("foto", "quadrifogli", "rigori", "sfilata", "caffe")
 REJOIN = 45.0            # secondi per rientrare in una partita dopo una disconnessione
 POS_STALE = 3.0          # una posizione piu' vecchia di cosi' non basta per convalidare un'azione
 
@@ -1026,6 +1026,14 @@ class Rigori(Partita):
 
 
 TIPI = {"foto": FotoNatura, "quadrifogli": Quadrifogli, "rigori": Rigori}
+
+# I minigiochi del centro storico, ognuno nel suo modulo (server/sfilata.py, server/caffe.py): ognuno importa da qui
+# Partita e le funzioni comuni (qui sono gia' definite) e si aggiunge a TIPI. Se un modulo manca, il relay va lo stesso.
+for _mod, _nome in (("sfilata", "Sfilata"), ("caffe", "Caffe")):
+    try:
+        TIPI[_mod] = getattr(__import__(_mod), _nome)
+    except Exception as _e:      # noqa: BLE001
+        print("giochi: %s non disponibile (%r)" % (_mod, _e))
 
 
 # ------------------------------------------------------------------------------------------ il gestore

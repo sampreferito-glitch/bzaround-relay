@@ -73,6 +73,18 @@
   "min": 2, "max": 8, "attesa": 20,
   "tiri": 5, "supplementari": 6, "scelta": 12, "esito": 5.0
  },
+ "sfilata": {
+  "_": "La sfilata di Mochi (server/sfilata.py). vestire: secondi per scegliere l'outfit; intro: la presentazione prima della passerella; per: secondi di passerella a testa; voto: secondi per votare; premi: il podio. I temi sono in sfilata.py (TEMI) o qui in \"temi\": [[id, nome, frase], ...].",
+  "nome": "La sfilata di Mochi",
+  "min": 2, "max": 10, "attesa": 20,
+  "vestire": 100, "intro": 3.0, "per": 10.0, "voto": 30, "premi": 11
+ },
+ "caffe": {
+  "_": "Il cameriere pasticcione (server/caffe.py), gioco di squadra al Caffe' dei Portici. durata: secondi; ogni: secondi tra un cliente e l'altro con un giocatore (con piu' giocatori arrivano piu' spesso); pazienza: quanto aspetta un cliente; premi: secondo le stelle della squadra (1, 2, 3), uguali per tutti.",
+  "nome": "Il cameriere pasticcione",
+  "min": 1, "max": 6, "attesa": 15,
+  "durata": 240, "ogni": 14.0, "pazienza": 70.0
+ },
  "premi": {
   "_": "Ogni premio e' solo estetico o una comodita' di casa: niente vantaggi nei giochi. 'monete' valgono solo se nel gioco i soldi sono accesi.",
   "foto": {
@@ -90,6 +102,18 @@
   "rigori": {
    "1": {"monete": 300, "titolo": "Bomber del Talvera", "trofeo": "coppa_rigori"},
    "2": {"monete": 150, "adesivo": "pallone"},
+   "tutti": {"monete": 60}
+  },
+  "caffe": {
+   "_": "per stelle della squadra, a tutti",
+   "1": {"monete": 80, "adesivo": "tazzina"},
+   "2": {"monete": 160, "adesivo": "krapfen"},
+   "3": {"monete": 250, "titolo": "Cameriere d'oro dei Portici", "trofeo": "vassoio_doro"}
+  },
+  "sfilata": {
+   "1": {"monete": 300, "titolo": "Stella di Piazza Walther", "trofeo": "passerella_doro"},
+   "2": {"monete": 200, "adesivo": "rossetto"},
+   "3": {"monete": 150, "adesivo": "fiocco"},
    "tutti": {"monete": 60}
   }
  }
