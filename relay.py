@@ -4,6 +4,7 @@ Each client sends small JSON messages:
   {"t": "hi", "name": "...", "look": {...}}          once, on joining (and again when the look changes)
   {"t": "p", "x": .., "y": .., "z": .., "r": .., "a": "walk", "w": "town"}   about ten times a second
   {"t": "e", "chat": "..."}                           a speech bubble
+  {"t": "g", "a": ...}                                the minigames (server/giochi.py): handled here, never relayed
 The relay stamps each with the sender's id. A player who leaves is announced to all with {"t": "bye", "id": ..}.
 Rooms come from the URL path (wss://host/bolzano), so separate groups can play apart.
 
@@ -26,6 +27,8 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 import websockets
+
+from giochi import Giochi
 
 ROOMS = {}             # room -> {websocket: peer dict}
 _ids = itertools.count(1)
@@ -109,6 +112,18 @@ def send(ws, out):
     websockets.broadcast([ws], out)
 
 
+GIOCHI = Giochi(send, log)     # the minigames (server/giochi.py): they decide, the games only show and ask
+
+
+async def giochi_loop():
+    while True:
+        await asyncio.sleep(0.25)
+        try:
+            GIOCHI.tick()
+        except Exception as e:      # (a bug in one game must not stop the relay)
+            log("giochi: errore", repr(e))
+
+
 async def near_loop():
     while True:
         await asyncio.sleep(NEAR_DT)
@@ -173,9 +188,17 @@ async def handler(ws):
                 msg = json.loads(raw)
             except ValueError:
                 continue
-            if not isinstance(msg, dict) or msg.get("t") not in ("hi", "p", "e"):
+            if not isinstance(msg, dict) or msg.get("t") not in ("hi", "p", "e", "g"):
                 continue
             t = msg["t"]
+            if t == "g":
+                # a minigame: to the server's own games, never passed on as it is
+                if me["hi"]:
+                    try:
+                        GIOCHI.messaggio(room, ws, me, msg)
+                    except Exception as e:
+                        log("giochi: errore", repr(e))
+                continue
             if t == "p":
                 now = time.time()
                 if now - me["last_p"] < MIN_P_DT:
@@ -187,10 +210,17 @@ async def handler(ws):
                 except (TypeError, ValueError):
                     continue
                 me["w"] = str(msg.get("w", "town"))[:80]
+                try:
+                    me["y"] = float(msg.get("y", 0.0))
+                except (TypeError, ValueError):
+                    pass
             msg["id"] = me["id"]
             me["n"][t] += 1
             if t == "hi":
                 me["name"] = str(msg.get("name", ""))[:40]
+                if not me.get("uid"):
+                    # (the id the minigames know a player by, to come back to a match after a lost signal; it never changes once set)
+                    me["uid"] = str(msg.get("uid", ""))[:64] or None
                 log("nome", me["id"], repr(me["name"]))
                 try:
                     v, k = int(msg.get("v", me["v"])), int(msg.get("k", me["k"]))
@@ -218,6 +248,10 @@ async def handler(ws):
         pass                # (a closed tab or a lost phone signal: an ordinary way to leave)
     finally:
         log("esce", me["id"], repr(me["name"]), "dopo", round(time.time() - me["since"]), "s", me["n"])
+        try:
+            GIOCHI.disconnesso(room, me)
+        except Exception as e:
+            log("giochi: errore", repr(e))
         peers.pop(ws, None)
         WATCH.pop(me["id"], None)
         for oid in me["sees"]:
@@ -235,6 +269,7 @@ async def main():
         print("bzaround relay on port", port, flush=True)
         asyncio.create_task(map_loop())
         asyncio.create_task(near_loop())
+        asyncio.create_task(giochi_loop())
         await asyncio.Future()
 
 
