@@ -1,0 +1,7 @@
+{
+ "_": "Il prato di trifogli dei Prati del Talvera: dove stanno le piantine (uguale per tutti, dai punti d'erba di giochi_talvera.json). Qui solo le posizioni: quali sono quadrifogli lo decide il server (server/giochi_config.json, \"prato\"). Copia identica in server/trifogli.json. ogni: una macchia ogni tanti punti; piante: quante per macchia (min, max); raggio: quanto si allargano (m).",
+ "seme": 2026,
+ "ogni": 3,
+ "piante": [3, 8],
+ "raggio": 0.8
+}

@@ -166,7 +166,7 @@ async def handler(ws):
     if len(peers) >= MAX_ROOM:
         await ws.close(1013, "room full")
         return
-    me = {"id": next(_ids), "hi": None, "p": None, "name": None, "ua": str(headers.get("User-Agent", ""))[:160],
+    me = {"id": next(_ids), "_ws": ws, "hi": None, "p": None, "name": None, "ua": str(headers.get("User-Agent", ""))[:160],
           "origin": str(headers.get("Origin", ""))[:80], "since": time.time(), "n": {"hi": 0, "p": 0, "e": 0}, "last_p": 0.0,
           "v": version, "k": k, "x": 0.0, "z": 0.0, "w": None, "sees": set()}
     log("arriva", me["id"], "room", room, "v", version, "ua", repr(me["ua"]), "origin", repr(me["origin"]))
@@ -214,6 +214,11 @@ async def handler(ws):
                     me["y"] = float(msg.get("y", 0.0))
                 except (TypeError, ValueError):
                     pass
+                if me["hi"]:
+                    try:
+                        GIOCHI.mosso(room, ws, me)      # (the clovers of the Talvera near this player)
+                    except Exception as e:
+                        log("giochi: errore", repr(e))
             msg["id"] = me["id"]
             me["n"][t] += 1
             if t == "hi":

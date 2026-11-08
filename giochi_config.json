@@ -57,11 +57,15 @@
    ]
   }
  },
+ "prato": {
+  "_": "I trifogli del Talvera, sempre li' nel mondo (data/trifogli.json). quadrifogli: la parte che e' un quadrifoglio (0.05 = 5%); dorati: tra i quadrifogli, quelli dorati; seme_segreto: decide quali (cambiarlo cambia tutto il prato); vista: da quanti metri il server dice a un giocatore dove sono; presa: da quanto vicino si raccoglie; ricresce_ore: dopo quanto un quadrifoglio raccolto torna.",
+  "quadrifogli": 0.05, "dorati": 0.08, "seme_segreto": 914273, "vista": 12.0, "presa": 2.0, "ricresce_ore": 2.0
+ },
  "quadrifogli": {
   "nome": "Caccia ai quadrifogli",
   "min": 2, "max": 10, "durata": 180, "attesa": 20,
   "zona": {"x0": -372, "x1": -270, "z0": 30, "z1": 125},
-  "quanti": 34, "rari": 4, "distanza": 3.0, "vista": 12.0, "presa": 2.3,
+  "presa": 2.0,
   "punti": {"normale": 1, "raro": 3}
  },
  "rigori": {
