@@ -1,0 +1,92 @@
+{
+ "_": "Minigiochi di bzaround: tutto quello che si regola senza toccare il codice (server/giochi.py lo legge all'avvio). Tempi in secondi, distanze in metri. Specie: sp (chiave), nome, col (il colore che conta per la varieta'), hex (il colore del modello), tipo (farfalla, libellula, ape, coccinella, cimice, uccello, scoiattolo, ermellino, tracce, falena), prob (peso di uscita), raro.",
+ "foto": {
+  "nome": "Fotografi della natura",
+  "min": 2, "max": 10, "durata": 180, "attesa": 20,
+  "zona": {"x0": -372, "x1": -270, "z0": -95, "z1": 30},
+  "insetti_insieme": 20, "vita": [25, 60],
+  "raggio": 12.0, "angolo": 14.0, "ogni": 0.5,
+  "punti": {"colore_nuovo": 10, "raro": 15, "doppio": 1, "doppi_max": 5},
+  "stagioni": {
+   "primavera": [
+    {"sp": "cedronella", "nome": "Cedronella", "col": "giallo", "hex": "#f6e58d", "tipo": "farfalla", "prob": 10},
+    {"sp": "argo_azzurro", "nome": "Argo azzurro", "col": "azzurro", "hex": "#9cc9ef", "tipo": "farfalla", "prob": 9},
+    {"sp": "cavolaia", "nome": "Cavolaia", "col": "bianco", "hex": "#f7f4ea", "tipo": "farfalla", "prob": 10},
+    {"sp": "aurora", "nome": "Aurora", "col": "arancione", "hex": "#f6b26b", "tipo": "farfalla", "prob": 7},
+    {"sp": "licena_rosa", "nome": "Licena rosa", "col": "rosa", "hex": "#f4b6c8", "tipo": "farfalla", "prob": 6},
+    {"sp": "lilla", "nome": "Farfalla lilla", "col": "viola", "hex": "#c3a6e0", "tipo": "farfalla", "prob": 5},
+    {"sp": "coccinella", "nome": "Coccinella", "col": "rosso", "hex": "#e0473f", "tipo": "coccinella", "prob": 8},
+    {"sp": "ape", "nome": "Ape", "col": "miele", "hex": "#e8b04a", "tipo": "ape", "prob": 8},
+    {"sp": "cetonia", "nome": "Cetonia dorata", "col": "verde", "hex": "#5fbf7a", "tipo": "cimice", "prob": 4},
+    {"sp": "macaone", "nome": "Macaone", "col": "speciale", "hex": "#f2d64b", "tipo": "farfalla", "prob": 1.2, "raro": true}
+   ],
+   "estate": [
+    {"sp": "vanessa_atalanta", "nome": "Vanessa atalanta", "col": "rosso", "hex": "#e2483c", "tipo": "farfalla", "prob": 9},
+    {"sp": "vanessa_cardo", "nome": "Vanessa del cardo", "col": "arancione", "hex": "#f08a2e", "tipo": "farfalla", "prob": 9},
+    {"sp": "cedronella_estiva", "nome": "Cedronella", "col": "giallo", "hex": "#f7d13a", "tipo": "farfalla", "prob": 9},
+    {"sp": "icaro", "nome": "Icaro", "col": "azzurro", "hex": "#4f9de6", "tipo": "farfalla", "prob": 9},
+    {"sp": "tecla_verde", "nome": "Tecla del rovo", "col": "verde", "hex": "#58c46a", "tipo": "farfalla", "prob": 5},
+    {"sp": "apatura", "nome": "Apatura", "col": "viola", "hex": "#8a5cd6", "tipo": "farfalla", "prob": 4},
+    {"sp": "libellula_azzurra", "nome": "Libellula azzurra", "col": "blu", "hex": "#3a7bd5", "tipo": "libellula", "prob": 7},
+    {"sp": "libellula_rossa", "nome": "Libellula rossa", "col": "rosso", "hex": "#d8402f", "tipo": "libellula", "prob": 5},
+    {"sp": "coccinella_gialla", "nome": "Coccinella gialla", "col": "giallo", "hex": "#f2cf32", "tipo": "coccinella", "prob": 2, "raro": true},
+    {"sp": "ape_estiva", "nome": "Ape", "col": "miele", "hex": "#e8b04a", "tipo": "ape", "prob": 7},
+    {"sp": "apollo", "nome": "Apollo delle Alpi", "col": "speciale", "hex": "#f4f1e8", "tipo": "farfalla", "prob": 1.0, "raro": true}
+   ],
+   "autunno": [
+    {"sp": "vanessa_autunno", "nome": "Vanessa del cardo", "col": "arancione", "hex": "#e9822b", "tipo": "farfalla", "prob": 10},
+    {"sp": "satiro", "nome": "Satiro", "col": "marrone", "hex": "#9a6a44", "tipo": "farfalla", "prob": 10},
+    {"sp": "cedronella_autunno", "nome": "Cedronella", "col": "giallo", "hex": "#e9c547", "tipo": "farfalla", "prob": 7},
+    {"sp": "atalanta_autunno", "nome": "Vanessa atalanta", "col": "rosso", "hex": "#b8382f", "tipo": "farfalla", "prob": 6},
+    {"sp": "simpetro", "nome": "Libellula rossa", "col": "rosso", "hex": "#c9452e", "tipo": "libellula", "prob": 6},
+    {"sp": "cimice_verde", "nome": "Cimice verde", "col": "verde", "hex": "#7aa64a", "tipo": "cimice", "prob": 5},
+    {"sp": "coccinella_arancio", "nome": "Coccinella arancione", "col": "arancione", "hex": "#f0902f", "tipo": "coccinella", "prob": 5},
+    {"sp": "falena_bruna", "nome": "Falena bruna", "col": "grigio", "hex": "#a99a88", "tipo": "falena", "prob": 4},
+    {"sp": "pavone", "nome": "Vanessa io", "col": "speciale", "hex": "#a8342e", "tipo": "farfalla", "prob": 1.2, "raro": true}
+   ],
+   "inverno": [
+    {"sp": "pettirosso", "nome": "Pettirosso", "col": "arancione", "hex": "#e8823a", "tipo": "uccello", "prob": 10},
+    {"sp": "cinciallegra", "nome": "Cinciallegra", "col": "giallo", "hex": "#f0d040", "tipo": "uccello", "prob": 9},
+    {"sp": "passero", "nome": "Passero", "col": "marrone", "hex": "#9a7656", "tipo": "uccello", "prob": 10},
+    {"sp": "cinciarella", "nome": "Cinciarella", "col": "azzurro", "hex": "#5f9bd8", "tipo": "uccello", "prob": 6},
+    {"sp": "merlo", "nome": "Merlo", "col": "nero", "hex": "#3a3536", "tipo": "uccello", "prob": 7},
+    {"sp": "scoiattolo", "nome": "Scoiattolo", "col": "rosso", "hex": "#b5522b", "tipo": "scoiattolo", "prob": 5},
+    {"sp": "falena_invernale", "nome": "Falena invernale", "col": "grigio", "hex": "#b8b0a2", "tipo": "falena", "prob": 4},
+    {"sp": "tracce_lepre", "nome": "Tracce di lepre", "col": "bianco", "hex": "#8a7a6a", "tipo": "tracce", "prob": 4},
+    {"sp": "ermellino", "nome": "Ermellino d'inverno", "col": "speciale", "hex": "#fbfaf6", "tipo": "ermellino", "prob": 1.0, "raro": true}
+   ]
+  }
+ },
+ "quadrifogli": {
+  "nome": "Caccia ai quadrifogli",
+  "min": 2, "max": 10, "durata": 180, "attesa": 20,
+  "zona": {"x0": -372, "x1": -270, "z0": 30, "z1": 125},
+  "quanti": 34, "rari": 4, "distanza": 3.0, "vista": 12.0, "presa": 2.3,
+  "punti": {"normale": 1, "raro": 3}
+ },
+ "rigori": {
+  "nome": "Rigori al Talvera",
+  "min": 2, "max": 8, "attesa": 20,
+  "tiri": 5, "supplementari": 6, "scelta": 12, "esito": 5.0
+ },
+ "premi": {
+  "_": "Ogni premio e' solo estetico o una comodita' di casa: niente vantaggi nei giochi. 'monete' valgono solo se nel gioco i soldi sono accesi.",
+  "foto": {
+   "1": {"monete": 300, "titolo": "Fotografo del Talvera", "adesivo": "farfalla_doro"},
+   "2": {"monete": 200, "adesivo": "farfalla_argento"},
+   "3": {"monete": 150, "adesivo": "farfalla_bronzo"},
+   "tutti": {"monete": 60}
+  },
+  "quadrifogli": {
+   "1": {"monete": 300, "titolo": "Mano fortunata", "trofeo": "quadrifoglio_doro"},
+   "2": {"monete": 200, "adesivo": "quadrifoglio"},
+   "3": {"monete": 150, "adesivo": "quadrifoglio"},
+   "tutti": {"monete": 60}
+  },
+  "rigori": {
+   "1": {"monete": 300, "titolo": "Bomber del Talvera", "trofeo": "coppa_rigori"},
+   "2": {"monete": 150, "adesivo": "pallone"},
+   "tutti": {"monete": 60}
+  }
+ }
+}
