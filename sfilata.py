@@ -17,7 +17,7 @@ import json
 import os
 import time
 
-from giochi import CFG, Partita
+from giochi import Partita
 
 TEMI = [
     ["primavera", "Primavera in città", "Colori freschi, fiori, giacche leggere: Bolzano si risveglia."],

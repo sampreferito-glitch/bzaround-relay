@@ -1,9 +1,174 @@
 {
- "_": "Il Caffè dei Portici (minigioco Il cameriere pasticcione), in Piazza del Municipio dove sbucano i Portici. Coordinate del mondo (x, z). Copia identica in server/caffe.json: il server controlla le distanze su questi punti. bancone: il centro e la direzione verso cui guarda (verso i tavoli); stazioni: macchina del caffe', spremiagrumi delle mele, vetrina dei dolci, passe (dove si posano le bevande pronte); tavoli: in ordine di apertura (piu' giocatori, piu' tavoli).",
- "bancone": [95.0, -81.6],
- "verso": [0.0, -1.0],
- "stazioni": {"macchina": [92.6, -82.6], "succhi": [94.4, -82.6], "dolci": [97.6, -82.6], "passe": [95.9, -82.6]},
- "tavoli": [[90.0, -86.2], [95.0, -86.6], [100.0, -86.2], [87.6, -90.4], [92.4, -91.0], [97.6, -91.0], [102.2, -90.4], [95.0, -94.6]],
- "ingresso": [[86.0, -95.0], [104.0, -84.0], [100.0, -97.0]],
- "bacheca": [89.2, -81.4]
+ "_": "Il cameriere pasticcione, nella sala del CAPITOL Caffè (Via Dr. Streiter 8): una stanza a parte dentro il bar (Rooms \"capitol_sala\", dalla porta in fondo al bar rs_12). Coordinate del mondo (x, z): le stanze stanno attorno a RoomInterior.ORIGIN (0, 0, 5000). Copia identica in server/caffe.json: il server controlla le distanze su questi punti, e solo per chi sta in questa stanza (\"stanza\"). Il bar e' basso, a misura dei personaggi (altezza): bancone = il banco di servizio davanti (centro e lunghezza), con i posti dove si posano le bevande (banco); retro = il piano di lavoro contro il muro, con le stazioni; varco = l'apertura per entrare dietro il bancone; bar_zona = il rettangolo dietro il bancone (chi ci sta e' al bar); stazioni: macchina del caffe' (2 gruppi), cioccolatiera, bollitore del te', spremimele, rastrelliera delle tazze pulite, lavastoviglie, vetrina dei dolci (sul davanti, verso la sala), pila dei vassoi; partenza: dove comincia chi fa il bar, la sala o tutto; mochi_bar / mochi_sala: dove sta Mochi quando lavora al bar (da soli) o quando aiuta (in squadra); tavoli: in ordine di apertura (piu' giocatori, piu' tavoli); ingresso: dove entrano i clienti; bacheca: la lavagna del menu; minigioco: la bacheca del gioco, vicino alla porta.",
+ "stanza": "capitol_sala",
+ "bar": "rs_12",
+ "altezza": 0.64,
+ "bancone": [
+  -0.75,
+  4993.0
+ ],
+ "bancone_lungo": 5.3,
+ "verso": [
+  0.0,
+  1.0
+ ],
+ "retro": {
+  "centro": [
+   -0.2,
+   4990.6
+  ],
+  "lungo": 6.4
+ },
+ "varco": [
+  2.65,
+  4992.8
+ ],
+ "bar_zona": {
+  "x": [
+   -3.6,
+   3.4
+  ],
+  "z": [
+   4990.0,
+   4992.75
+  ]
+ },
+ "banco": [
+  [
+   -2.65,
+   4993.0
+  ],
+  [
+   -1.8499999999999999,
+   4993.0
+  ],
+  [
+   -1.0499999999999998,
+   4993.0
+  ],
+  [
+   -0.24999999999999956,
+   4993.0
+  ],
+  [
+   0.5500000000000003,
+   4993.0
+  ],
+  [
+   1.35,
+   4993.0
+  ]
+ ],
+ "stazioni": {
+  "rastrelliera": [
+   -3.0,
+   4990.6
+  ],
+  "spremimele": [
+   -2.0,
+   4990.6
+  ],
+  "macchina": [
+   -0.65,
+   4990.6
+  ],
+  "cioccolatiera": [
+   0.65,
+   4990.6
+  ],
+  "bollitore": [
+   1.6,
+   4990.6
+  ],
+  "lavastoviglie": [
+   2.55,
+   4990.6
+  ],
+  "vetrina": [
+   -3.95,
+   4993.0
+  ],
+  "vassoi": [
+   -3.25,
+   4993.0
+  ]
+ },
+ "partenza": {
+  "bar": [
+   0.0,
+   4991.6
+  ],
+  "sala": [
+   -0.75,
+   4994.4
+  ],
+  "tutto": [
+   1.4,
+   4994.4
+  ]
+ },
+ "mochi_bar": [
+  -2.9,
+  4991.65
+ ],
+ "mochi_sala": [
+  4.6,
+  4992.4
+ ],
+ "tavoli": [
+  [
+   5.0,
+   4998.1
+  ],
+  [
+   0.0,
+   4998.5
+  ],
+  [
+   -5.0,
+   4998.1
+  ],
+  [
+   7.2,
+   5002.3
+  ],
+  [
+   2.6,
+   5002.9
+  ],
+  [
+   -2.6,
+   5002.9
+  ],
+  [
+   -7.2,
+   5002.3
+  ],
+  [
+   0.0,
+   5006.3
+  ]
+ ],
+ "ingresso": [
+  [
+   -2.2,
+   5009.0
+  ],
+  [
+   2.2,
+   5009.0
+  ],
+  [
+   0.0,
+   5009.3
+  ]
+ ],
+ "bacheca": [
+  5.8,
+  4993.3
+ ],
+ "minigioco": [
+  -6.8,
+  5008.2
+ ]
 }

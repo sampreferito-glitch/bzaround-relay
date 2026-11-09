@@ -293,9 +293,12 @@ class FotoNatura(Partita):
             n = int(msg.get("ins", -1))
             cam = [float(v) for v in msg.get("c", [])][:3]
             d = [float(v) for v in msg.get("d", [])][:3]
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return
         if not (0 <= n < len(self.insetti)) or len(cam) != 3 or len(d) != 3:
+            return
+        # (a NaN direction would make every angle 0: a perfect shot from anywhere within reach)
+        if not all(math.isfinite(v) for v in cam + d) or sum(v * v for v in d) < 1e-12:
             return
         ins = self.insetti[n]
         tt = t - self.inizio
@@ -383,7 +386,7 @@ def piante_trifogli(punti, campo, par):
             z = _r2(float(p[2]) + math.sin(a) * r)
             dx, dz = x - cx, z - cz
             # (non sul campetto)
-            if abs(dx * fx[0] + dz * fx[1]) < 10.2 and abs(dx * fz[0] + dz * fz[1]) < 8.6:
+            if abs(dx * fx[0] + dz * fx[1]) < 10.2 and abs(dx * fz[0] + dz * fz[1]) < 11.4:     # (campo, panchine, tribuna)
                 continue
             out.append((pid, x, z))
     return out
@@ -463,17 +466,21 @@ class Prato:
 
     def prendi(self, room, me, pid):
         """Il quadrifoglio pid preso da chi sta in me: (ok, motivo, dorato). Il server controlla da dove (la posizione del
-        relay, non quella dichiarata), che sia davvero un quadrifoglio e che nessuno l'abbia preso prima."""
-        if pid not in self.quadri:
+        relay, non quella dichiarata), che sia davvero un quadrifoglio e che nessuno l'abbia preso prima.
+        La distanza si controlla per prima: da lontano la risposta e' sempre "lontano", cosi' chiedere tutti gli id non
+        dice quali sono quadrifogli (il radar che il server deve impedire)."""
+        if pid not in self.pos:
             return False, "trifoglio", False
-        pr = self._presi(room)
-        if pid in pr:
-            return False, "preso", False
         if me.get("w") != "town" or time.time() - me.get("last_p", 0) > POS_STALE:
             return False, "lontano", False
         px, pz = self.pos[pid]
         if math.hypot(me["x"] - px, me["z"] - pz) > self.presa:
             return False, "lontano", False
+        if pid not in self.quadri:
+            return False, "trifoglio", False
+        pr = self._presi(room)
+        if pid in pr:
+            return False, "preso", False
         pr[pid] = time.time() + self.ricresce
         chi = me.get("name") or "Viaggiatore"
         for ws, st in self.visti.get(room, {}).items():
@@ -1052,10 +1059,19 @@ class Giochi:
         self._dopo.append((time.time() + s, fn))
 
     def di(self, room, uid):
+        """La partita in corso di questo giocatore. Chi ne e' uscito con "esci" non ne fa piu' parte: un "entra" dopo
+        porta in una sala nuova, non di nuovo li' (il rientro vale solo per chi ha perso la connessione)."""
         for p in self.partite.values():
-            if p.room == room and uid in p.giocatori and p.stato != "fine":
+            if p.room == room and uid in p.giocatori and p.stato != "fine" and not p.giocatori[uid].dati.get("uscito"):
                 return p
         return None
+
+    def stanza_vuota(self, room):
+        """L'ultimo giocatore ha lasciato la stanza (relay): via quello che si teneva per lei e non serve piu'.
+        I quadrifogli presi restano finche' non ricrescono (svuotare la stanza non deve farli ricrescere)."""
+        self.prato.visti.pop(room, None)
+        if not self.prato._presi(room):
+            self.prato.presi.pop(room, None)
 
     def mosso(self, room, ws, me):
         """Una posizione nuova di un giocatore (dal relay): i quadrifogli che ha vicino."""
@@ -1071,7 +1087,7 @@ class Giochi:
                 return p.azione(p.giocatori[uid], msg, time.time())
             try:
                 pid = int(msg.get("id", -1))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 return
             ok, motivo, raro = self.prato.prendi(room, me, pid)
             out = {"t": "g", "a": "q_trovato" if ok else "q_no", "id": pid, "raro": raro}
@@ -1145,7 +1161,10 @@ class Giochi:
         due = [x for x in self._dopo if x[0] <= t]
         self._dopo = [x for x in self._dopo if x[0] > t]
         for _, fn in due:
-            fn()
+            try:
+                fn()
+            except Exception as e:      # (one failing callback must not lose the others of the same tick)
+                self.log("giochi: errore in un rinvio", repr(e))
         for pid, p in list(self.partite.items()):
             if p.stato == "fine":
                 if t - p.chiusa > 30:
@@ -1154,7 +1173,14 @@ class Giochi:
             if p.stato == "attesa" and not p.giocatori:
                 del self.partite[pid]
                 continue
-            p.tick(t)
+            try:
+                p.tick(t)
+            except Exception as e:
+                # a match that fails every tick would stop every match after it: it is closed instead
+                self.log("giochi: partita %d (%s) chiusa per un errore" % (p.id, p.gioco), repr(e))
+                p.stato = "fine"
+                p.chiusa = t
+                continue
             if p.stato != "attesa":
                 for k, v in list(self.sale.items()):
                     if v is p:

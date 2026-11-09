@@ -80,10 +80,10 @@
   "vestire": 100, "intro": 3.0, "per": 10.0, "voto": 30, "premi": 11
  },
  "caffe": {
-  "_": "Il cameriere pasticcione (server/caffe.py), gioco di squadra al Caffe' dei Portici. durata: secondi; ogni: secondi tra un cliente e l'altro con un giocatore (con piu' giocatori arrivano piu' spesso); pazienza: quanto aspetta un cliente; premi: secondo le stelle della squadra (1, 2, 3), uguali per tutti.",
+  "_": "Il cameriere pasticcione (server/caffe.py), gioco di squadra nella sala del CAPITOL Caffe': bar e sala. durata: secondi; ogni: secondi tra un cliente e l'altro con un giocatore (con piu' giocatori arrivano piu' spesso; all'inizio piu' radi); pazienza: quanto aspetta un cliente dopo aver ordinato (piu' 12 s per ogni cosa in piu'); pazienza_ordine: quanto aspetta che qualcuno prenda l'ordinazione; premi: secondo le stelle della squadra (1, 2, 3), uguali per tutti.",
   "nome": "Il cameriere pasticcione",
   "min": 1, "max": 6, "attesa": 15,
-  "durata": 240, "ogni": 14.0, "pazienza": 70.0
+  "durata": 240, "ogni": 18.0, "pazienza": 90.0, "pazienza_ordine": 50.0
  },
  "premi": {
   "_": "Ogni premio e' solo estetico o una comodita' di casa: niente vantaggi nei giochi. 'monete' valgono solo se nel gioco i soldi sono accesi.",
