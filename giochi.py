@@ -31,7 +31,7 @@ import random
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GIOCHI = ("foto", "quadrifogli", "rigori", "sfilata", "caffe")
+GIOCHI = ("foto", "quadrifogli", "rigori", "sfilata", "caffe", "nascondino", "ballo", "gara")
 REJOIN = 45.0            # secondi per rientrare in una partita dopo una disconnessione
 POS_STALE = 3.0          # una posizione piu' vecchia di cosi' non basta per convalidare un'azione
 
@@ -1036,7 +1036,7 @@ TIPI = {"foto": FotoNatura, "quadrifogli": Quadrifogli, "rigori": Rigori}
 
 # I minigiochi del centro storico, ognuno nel suo modulo (server/sfilata.py, server/caffe.py): ognuno importa da qui
 # Partita e le funzioni comuni (qui sono gia' definite) e si aggiunge a TIPI. Se un modulo manca, il relay va lo stesso.
-for _mod, _nome in (("sfilata", "Sfilata"), ("caffe", "Caffe")):
+for _mod, _nome in (("sfilata", "Sfilata"), ("caffe", "Caffe"), ("nascondino", "Nascondino"), ("ballo", "Ballo"), ("gara", "Gara")):
     try:
         TIPI[_mod] = getattr(__import__(_mod), _nome)
     except Exception as _e:      # noqa: BLE001
@@ -1111,17 +1111,30 @@ class Giochi:
                     return p.sala() if p.stato == "attesa" else None
                 self.lascia_partita(p, uid)
             prova = bool(msg.get("prova", False))
+            # (il nascondino: a sessione iniziata si entra lo stesso, si gioca dal giro dopo)
+            if not prova:
+                for q in list(self.partite.values()):
+                    if q.room == room and q.gioco == gioco and q.stato == "via" and hasattr(q, "entra_in_corsa") and q.entra_in_corsa(me, ws):
+                        return
             if prova:
                 np = TIPI[gioco](self, room, prova=True)
                 self.partite[np.id] = np
+                if hasattr(np, "scelta"):
+                    np.scelta(msg)      # (il ballo: la difficolta')
+                if hasattr(np, "opzioni"):
+                    np.opzioni(msg)       # (le scelte di chi entra: la difficolta' degli NPC della gara)
                 np.aggiungi(me, ws)
                 return
             key = (room, gioco)
             sala = self.sale.get(key)
-            if sala is None or sala.stato != "attesa" or len(sala.giocatori) >= sala.cfg.get("max", 10):
+            if sala is None or sala.stato != "attesa" or sala.id not in self.partite or len(sala.giocatori) >= sala.cfg.get("max", 10):
                 sala = TIPI[gioco](self, room)
                 self.sale[key] = sala
                 self.partite[sala.id] = sala
+            if hasattr(sala, "scelta"):
+                sala.scelta(msg)
+            if hasattr(sala, "opzioni"):
+                sala.opzioni(msg)
             sala.aggiungi(me, ws)
         elif a == "esci":
             if p is not None:
@@ -1129,6 +1142,24 @@ class Giochi:
                 self.send(ws, json.dumps({"t": "g", "a": "uscito"}))
         elif p is not None and p.stato == "via":
             p.azione(p.giocatori[uid], msg, time.time())
+
+    # -- il relay chiede (il nascondino): chi vede chi, chi non va sulla mappa
+    def vede(self, dst_me, src_me):
+        """dst puo' ricevere il movimento di src? (no: il cercatore del nascondino, di chi non vede)."""
+        for p in self.partite.values():
+            if p.gioco == "nascondino" and p.stato == "via":
+                du = dst_me.get("uid") or ("id%d" % dst_me["id"])
+                su = src_me.get("uid") or ("id%d" % src_me["id"])
+                if p.nascosto_a(du, su):
+                    return False
+        return True
+
+    def fuori_mappa(self):
+        out = set()
+        for p in self.partite.values():
+            if p.gioco == "nascondino" and p.stato == "via":
+                out |= p.fuori_mappa()
+        return out
 
     def lascia_partita(self, p, uid):
         g = p.giocatori.get(uid)
@@ -1172,6 +1203,11 @@ class Giochi:
                 continue
             if p.stato == "attesa" and not p.giocatori:
                 del self.partite[pid]
+                # (anche dalle sale aperte: rimasta li', la sala vuota riceveva chi entrava dopo e, fuori dalle
+                # partite, non partiva mai piu')
+                for k, v in list(self.sale.items()):
+                    if v is p:
+                        del self.sale[k]
                 continue
             try:
                 p.tick(t)

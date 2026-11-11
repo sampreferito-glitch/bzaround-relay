@@ -74,16 +74,34 @@
   "tiri": 5, "supplementari": 6, "scelta": 12, "esito": 5.0
  },
  "sfilata": {
-  "_": "La sfilata di Mochi (server/sfilata.py). vestire: secondi per scegliere l'outfit; intro: la presentazione prima della passerella; per: secondi di passerella a testa; voto: secondi per votare; premi: il podio. I temi sono in sfilata.py (TEMI) o qui in \"temi\": [[id, nome, frase], ...].",
+  "_": "La sfilata di Mochi (server/sfilata.py, i capi in sfilata_capi.json: py tools/sfilata_capi.py). tema: la scheda del tema; vestire: secondi per scegliere l'outfit; intro: la giuria si presenta; per: secondi di passerella a testa; voto: secondi per votare (con almeno due giocatori); giudizio: i giudici si consultano (da soli); premi: il podio. concorrenti: quanti in passerella almeno (i posti liberi li prendono gli NPC); min 1: chi aspetta da solo sfila con gli NPC. I temi sono in sfilata.py (TEMI).",
   "nome": "La sfilata di Mochi",
-  "min": 2, "max": 10, "attesa": 20,
-  "vestire": 100, "intro": 3.0, "per": 10.0, "voto": 30, "premi": 11
+  "min": 1, "max": 10, "attesa": 25, "concorrenti": 5,
+  "tema": 7.0, "vestire": 100, "intro": 10.0, "per": 15.0, "voto": 50, "giudizio": 7.0, "premi": 24
  },
  "caffe": {
   "_": "Il cameriere pasticcione (server/caffe.py), gioco di squadra nella sala del CAPITOL Caffe': bar e sala. durata: secondi; ogni: secondi tra un cliente e l'altro con un giocatore (con piu' giocatori arrivano piu' spesso; all'inizio piu' radi); pazienza: quanto aspetta un cliente dopo aver ordinato (piu' 12 s per ogni cosa in piu'); pazienza_ordine: quanto aspetta che qualcuno prenda l'ordinazione; premi: secondo le stelle della squadra (1, 2, 3), uguali per tutti.",
   "nome": "Il cameriere pasticcione",
   "min": 1, "max": 6, "attesa": 15,
   "durata": 240, "ogni": 18.0, "pazienza": 90.0, "pazienza_ordine": 50.0
+ },
+ "ballo": {
+  "_": "Balla al Waltherhaus (server/ballo.py): la difficolta' la sceglie chi apre la sala (facile, normale, difficile: tempo e coreografia in ballo.py, DIFF). min 2 giocatori (da soli: con gli NPC); ballerini: quanti in pista almeno (i posti liberi li prendono gli NPC).",
+  "nome": "Balla al Waltherhaus",
+  "min": 2, "max": 8, "attesa": 20, "ballerini": 4
+ },
+ "nascondino": {
+  "_": "Il nascondino in citta' (server/nascondino.py, la mappa in nascondino_mappa.json: --nascondinomappa e py tools/nascondino_nascondigli.py). min: giocatori veri per partire (da soli: con gli NPC); presenta: chi cerca; nascondi: la conta; cerca: la ricerca (6 s in piu' per ogni nascosto oltre il secondo, al massimo 160); risultato: i punti del giro; classifica: la fine. Un giro per partecipante: tutti cercano una volta.",
+  "nome": "Il nascondino",
+  "min": 3, "max": 10, "attesa": 25,
+  "presenta": 5.0, "nascondi": 30.0, "cerca": 100.0, "risultato": 10.0, "classifica": 12.0
+ },
+ "gara": {
+  "_": "La gara delle biciclette (server/gara.py, il percorso in gara_bici.json: py tools/gara_percorso.py). giri: quanti giri; presenta: secondi di presentazione in griglia prima del 3-2-1; falsa: secondi di penalita' per chi parte prima del via (staccandosi di piu' di falsa_metri dalla griglia); concorrenti_soli: quanti in gara quando si corre da soli (i posti liberi li prendono gli NPC, da 3 a 7); difficolta: facile, normale o difficile (la sceglie chi corre da solo); dopo_primo: secondi dopo il primo arrivo poi si chiude; dopo_umani: da soli, secondi dopo il tuo arrivo per gli NPC ancora in strada; massimo: secondi di gara al massimo; premi: secondi di podio. Con altri giocatori niente NPC.",
+  "nome": "La gara delle biciclette",
+  "min": 1, "max": 8, "attesa": 25,
+  "giri": 2, "presenta": 10.0, "falsa": 3.0, "falsa_metri": 1.6, "concorrenti_soli": 5, "difficolta": "normale",
+  "dopo_primo": 45.0, "dopo_umani": 25.0, "massimo": 420.0, "premi": 18.0
  },
  "premi": {
   "_": "Ogni premio e' solo estetico o una comodita' di casa: niente vantaggi nei giochi. 'monete' valgono solo se nel gioco i soldi sono accesi.",
@@ -109,6 +127,24 @@
    "1": {"monete": 80, "adesivo": "tazzina"},
    "2": {"monete": 160, "adesivo": "krapfen"},
    "3": {"monete": 250, "titolo": "Cameriere d'oro dei Portici", "trofeo": "vassoio_doro"}
+  },
+  "ballo": {
+   "1": {"monete": 300, "titolo": "Stella del Waltherhaus", "trofeo": "scarpette_doro"},
+   "2": {"monete": 200, "adesivo": "nota_musicale"},
+   "3": {"monete": 150, "adesivo": "palla_specchi"},
+   "tutti": {"monete": 60}
+  },
+  "nascondino": {
+   "1": {"monete": 300, "titolo": "Ombra dei Portici", "trofeo": "lanterna_doro"},
+   "2": {"monete": 200, "adesivo": "occhiolino"},
+   "3": {"monete": 150, "adesivo": "colonna"},
+   "tutti": {"monete": 60}
+  },
+  "gara": {
+   "1": {"monete": 300, "titolo": "Campione dei Portici", "trofeo": "coppa_bici"},
+   "2": {"monete": 200, "adesivo": "campanello"},
+   "3": {"monete": 150, "adesivo": "borraccia"},
+   "tutti": {"monete": 60}
   },
   "sfilata": {
    "1": {"monete": 300, "titolo": "Stella di Piazza Walther", "trofeo": "passerella_doro"},

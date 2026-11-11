@@ -142,7 +142,7 @@ def reckon(peers):
         cand.sort(key=lambda c: c[0])
         want = {c[1] for c in cand[:me["k"]]}
         for c in cand[:me["k"]]:
-            if c[1] not in me["sees"] and c[2]["p"]:
+            if c[1] not in me["sees"] and c[2]["p"] and GIOCHI.vede(me, c[2]):
                 send(ws, c[2]["p"])
         for gone in me["sees"] - want:
             send(ws, json.dumps({"t": "far", "id": gone}))
@@ -189,7 +189,12 @@ async def near_loop():
 
 
 def map_of(peers):
-    return json.dumps({"t": "m", "l": [[m["id"], round(m["x"], 1), round(m["z"], 1), m["w"]] for m in peers.values() if m["w"] is not None]})
+    # (chi gioca a nascondino non compare sulla mappa di nessuno)
+    try:
+        via = GIOCHI.fuori_mappa()
+    except Exception:      # noqa: BLE001
+        via = set()
+    return json.dumps({"t": "m", "l": [[m["id"], round(m["x"], 1), round(m["z"], 1), m["w"]] for m in peers.values() if m["w"] is not None and m["id"] not in via]})
 
 
 async def map_loop():
@@ -336,6 +341,11 @@ async def handler(ws):
             else:
                 # movement and bubbles: the older games all of it, the new ones only from who they see
                 to = [w for w, o in peers.items() if w is not ws and o["v"] < 2] + [w for w in WATCH.get(me["id"], ()) if w in peers]
+                # (il nascondino: il cercatore non riceve chi non vede)
+                try:
+                    to = [w for w in to if GIOCHI.vede(peers[w], me)]
+                except Exception as e:      # noqa: BLE001
+                    log("giochi: errore", repr(e))
             websockets.broadcast(to, out)
     except websockets.ConnectionClosed:
         pass                # (a closed tab or a lost phone signal: an ordinary way to leave)
