@@ -37,6 +37,11 @@ BACHECA = (14.0, -52.0)            # la bacheca: il cercatore conta qui, girato 
 PARTENZA = (17.5, -55.5)           # dove partono i nascosti
 SPETTATORI = (23.0, -33.5)         # chi e' stato trovato guarda da qui, fuori dall'area (la strada a sud)
 CATTURA = 1.7
+# I contenitori in cui ci si nasconde DENTRO (un bidone, un cespuglio, uno scatolone): chi c'e' dentro non si vede e non
+# si prende da fuori; il cercatore deve andarci e guardare dentro ("apri"). Da quanto vicino si entra e si apre.
+CONT_TIPI = ("bidone", "cespuglio", "scatola")
+CONT_ENTRA = 1.9
+CONT_APRI = 2.0
 VISTA = 40.0
 CORRE = 4.2                        # m/s: chi va piu' veloce di cosi' fa rumore
 ACCUCCIATI = ("accucciato", "furtivo", "crouch")
@@ -238,6 +243,7 @@ class Npc:
         self.ultimo_visto = None
         self.rng = rng
         self.cambi = 0
+        self.aperti = set()          # (cercatore) i contenitori gia' aperti in questo giro
 
     def vai(self, dove, vel, anim):
         self.path = mappa().percorso((self.x, self.z), dove)
@@ -284,14 +290,20 @@ class Nascondino(Partita):
         self.storia = []               # i risultati dei giri
         self.fatti = set()             # chi ha gia' cercato
         umani = [g.uid for g in self.giocatori.values()]
-        if self.prova:
-            for d in self.rng.sample(NOMI_NPC, 4):
+        # (in pochi: gli NPC riempiono i posti, da soli o in due; l'utente: "se manca gente riempi con npc")
+        solo = self.prova or len(umani) == 1
+        if solo or len(umani) < int(self.cfg.get("min", 3)):
+            for d in self.rng.sample(NOMI_NPC, 4 if solo else max(2, 4 - len(umani))):
                 n = Npc(d, self.rng)
                 self.npc[n.uid] = n
         self.tutti_uid = umani + list(self.npc.keys())     # chi gioca (l'ordine dei turni e' a parte)
         self.ordine = list(self.tutti_uid)
         self.rng.shuffle(self.ordine)
-        if self.prova:
+        if self.npc and not solo:
+            # in due con gli NPC: cerca ognuno dei giocatori una volta (gli NPC si nascondono)
+            self.ordine = list(umani)
+            self.rng.shuffle(self.ordine)
+        if solo:
             # da soli: due giri, uno a cercare e uno a nascondersi (l'ordine a caso)
             me = umani[0]
             altro = next(u for u in self.ordine if u != me)
@@ -300,7 +312,8 @@ class Nascondino(Partita):
             self.punti.setdefault(u, 0)
         for g in self.giocatori.values():
             g.dati = {"fuori_t": 0.0, "rientri": 0}
-        self.giri = len(self.ordine) if not self.prova else 2
+        self.giri = len(self.ordine) if not solo else 2
+        self.cont = self._contenitori()
         self.n_giro = 0
         self.fase = "presenta"
         self.tutti(dict(self.dati_via(None), a="via"))
@@ -326,6 +339,7 @@ class Nascondino(Partita):
                 "npc": [[n.uid, n.nome] for n in self.npc.values()], "punti": self.punti,
                 "durate": {k: self.cfgv(k, d) for k, d in (("presenta", 5.0), ("nascondi", 30.0), ("cerca", 100.0), ("risultato", 10.0), ("classifica", 12.0))},
                 "bacheca": BACHECA, "partenza": PARTENZA, "spettatori": SPETTATORI,
+                "contenitori": [[c["x"], c["z"], c["yaw"], c["tipo"]] for c in getattr(self, "cont", [])],
                 "giro": self._giro_dati(gioc) if getattr(self, "giro", None) else None, "fase": getattr(self, "fase", "")}
 
     def _giro_dati(self, gioc):
@@ -335,6 +349,100 @@ class Nascondino(Partita):
         if gioc is not None:
             d["ruolo"] = "cercatore" if gioc.uid == gr["cercatore"] else ("preso" if gioc.uid in gr["presi"] else ("nascosto" if gioc.uid in gr["nascosti"] else "spettatore"))
         return d
+
+    # -- i contenitori (bidoni, cespugli, scatoloni)
+    def _contenitori(self):
+        """Una dozzina, sparsi: sui nascondigli verificati della mappa (dove si sta davvero, accanto a un muro), almeno
+        9 m l'uno dall'altro, due o tre per zona, a turno bidone, cespuglio, scatolone."""
+        spots = sorted(self.m.spots, key=lambda s: (s.get("zona", 0), -s["coperto"], s["x"], s["z"]))
+        rng = random.Random(4242)
+        rng.shuffle(spots)
+        out = []
+        per_zona = {}
+        for s in spots:
+            z = s.get("zona", 0)
+            if per_zona.get(z, 0) >= 3:
+                continue
+            if any(math.hypot(s["x"] - c["x"], s["z"] - c["z"]) < 9.0 for c in out):
+                continue
+            if math.hypot(s["x"] - BACHECA[0], s["z"] - BACHECA[1]) < 8.0 or math.hypot(s["x"] - PARTENZA[0], s["z"] - PARTENZA[1]) < 5.0:
+                continue
+            out.append({"x": round(s["x"], 2), "z": round(s["z"], 2), "yaw": round(s.get("verso", 0.0), 3),
+                        "tipo": CONT_TIPI[len(out) % 3], "chi": None, "aperto_t": 0.0})
+            per_zona[z] = per_zona.get(z, 0) + 1
+            if len(out) >= 14:
+                break
+        return out
+
+    def dentro_di(self, uid):
+        for i, c in enumerate(getattr(self, "cont", [])):
+            if c["chi"] == uid:
+                return i
+        return -1
+
+    def _ai_non_cercatori(self, msg):
+        gr = getattr(self, "giro", None)
+        for g in self.giocatori.values():
+            if gr is None or g.uid != gr["cercatore"]:
+                self.manda(g, msg)
+
+    def _entra(self, uid, i):
+        gr = getattr(self, "giro", None)
+        if gr is None or self.fase not in ("nascondi", "cerca") or uid not in gr["nascosti"] or uid in gr["presi"]:
+            return False
+        if not (0 <= i < len(self.cont)) or self.cont[i]["chi"] is not None or self.dentro_di(uid) >= 0:
+            return False
+        p = self.pos(uid)
+        c = self.cont[i]
+        if p is None or math.hypot(p[0] - c["x"], p[1] - c["z"]) > CONT_ENTRA:
+            return False
+        c["chi"] = uid
+        if uid in self.npc:
+            n = self.npc[uid]
+            n.x, n.z, n.anim, n.path = c["x"], c["z"], "dentro", []
+        g = self.giocatori.get(uid)
+        if g:
+            self.manda(g, {"a": "in_cont", "c": i, "x": c["x"], "z": c["z"], "tipo": c["tipo"]})
+        self._ai_non_cercatori({"a": "cont", "c": i, "chi": uid})
+        return True
+
+    def _esci(self, uid):
+        i = self.dentro_di(uid)
+        if i < 0:
+            return
+        c = self.cont[i]
+        c["chi"] = None
+        # fuori, davanti al contenitore (dalla parte della strada)
+        ex = (round(c["x"] + math.sin(c["yaw"]) * 0.9, 2), round(c["z"] + math.cos(c["yaw"]) * 0.9, 2))
+        if uid in self.npc:
+            n = self.npc[uid]
+            n.x, n.z = ex
+        g = self.giocatori.get(uid)
+        if g:
+            self.manda(g, {"a": "fuori_cont", "c": i, "x": ex[0], "z": ex[1]})
+        self._ai_non_cercatori({"a": "cont", "c": i, "chi": ""})
+
+    def _apri(self, cerc, i, t):
+        self.g.log("nascondino apri", self.id, self.nome(cerc), i)
+        gr = self.giro
+        if self.fase != "cerca" or cerc != gr["cercatore"] or not (0 <= i < len(self.cont)):
+            return
+        c = self.cont[i]
+        if t - c["aperto_t"] < 1.0:
+            return
+        p = self.pos(cerc)
+        if p is None or math.hypot(p[0] - c["x"], p[1] - c["z"]) > CONT_APRI:
+            return
+        c["aperto_t"] = t
+        chi = c["chi"]
+        self.tutti({"a": "aperto", "c": i, "vuoto": chi is None})
+        if chi is None:
+            g = self.giocatori.get(cerc)
+            if g:
+                self.manda(g, {"a": "vuoto", "c": i})
+            return
+        self._esci(chi)
+        self._cattura(cerc, chi, t)
 
     def _prossimo_cercatore(self):
         # chi non ha ancora cercato, nell'ordine; se l'hanno fatto tutti, si ricomincia il giro dei turni
@@ -350,6 +458,8 @@ class Nascondino(Partita):
         self.n_giro += 1
         self.fatti.add(cerc)
         nascosti = [u for u in self.tutti_uid if u != cerc and self.presente(u)]
+        for c in getattr(self, "cont", []):
+            c["chi"] = None          # (un giro nuovo: i contenitori di nuovo vuoti)
         self.giro = {"cercatore": cerc, "nascosti": set(nascosti), "presi": [], "inizio_cerca": 0.0, "durata": 0.0,
                      "visibili": set(), "indizi": [], "ind_t": 0.0, "passi_t": 0.0, "vicino_liv": 0, "vicino_t": 0.0,
                      "allerte": {}, "zone_dette": set(), "pos_prima": {}, "punti": {}, "presi_t": {}}
@@ -365,6 +475,7 @@ class Nascondino(Partita):
                 n = self.npc[u]
                 n.x, n.z, n.yaw = pos
                 n.path, n.stato, n.anim, n.allerta, n.bersaglio, n.visti, n.spot, n.cambi = [], "fermo", "idle", {}, None, set(), None, 0
+                n.aperti = set()
             else:
                 g = self.giocatori.get(u)
                 if g:
@@ -394,6 +505,9 @@ class Nascondino(Partita):
 
     # -- chi e' dove
     def pos(self, uid):
+        i = self.dentro_di(uid) if hasattr(self, "cont") else -1
+        if i >= 0:
+            return (self.cont[i]["x"], self.cont[i]["z"])
         if uid in self.npc:
             n = self.npc[uid]
             return (n.x, n.z)
@@ -418,6 +532,8 @@ class Nascondino(Partita):
         a, b = self.pos(cerc), self.pos(uid)
         if a is None or b is None:
             return False
+        if self.dentro_di(uid) >= 0:
+            return False          # (dentro un bidone, un cespuglio, uno scatolone: solo aprendolo)
         d = math.hypot(a[0] - b[0], a[1] - b[1])
         if d < 2.0:
             return True
@@ -457,7 +573,10 @@ class Nascondino(Partita):
         for u in list(gr["nascosti"]):
             if not self.presente(u):
                 gr["nascosti"].discard(u)
-        if not self.prova and sum(1 for g in self.giocatori.values() if self.presente(g.uid)) < int(self.cfg.get("min", 3)):
+        for c in self.cont:
+            if c["chi"] is not None and not self.presente(c["chi"]):
+                c["chi"] = None
+        if not self.prova and not self.npc and sum(1 for g in self.giocatori.values() if self.presente(g.uid)) < int(self.cfg.get("min", 3)):
             self.tutti({"a": "avviso", "testo": "Siete rimasti in pochi: la partita si chiude qui."})
             return self._fine_sessione(t)
         dt = 0.25
@@ -531,8 +650,21 @@ class Nascondino(Partita):
 
     # -- la cattura
     def azione(self, gioc, msg, t):
-        if msg.get("a") == "prendi":
+        a = msg.get("a")
+        if a == "prendi":
             self._prendi(gioc.uid, t)
+            return
+        try:
+            i = int(msg.get("c", -1))
+        except (TypeError, ValueError, OverflowError):
+            i = -1
+        if a == "entra_cont":
+            if not self._entra(gioc.uid, i):
+                self.manda(gioc, {"a": "no_cont", "c": i})
+        elif a == "esci_cont":
+            self._esci(gioc.uid)
+        elif a == "apri":
+            self._apri(gioc.uid, i, t)
 
     def _prendi(self, cerc, t):
         gr = self.giro
@@ -546,7 +678,7 @@ class Nascondino(Partita):
             return
         best = None
         for u in gr["nascosti"]:
-            if u in gr["presi"]:
+            if u in gr["presi"] or self.dentro_di(u) >= 0:
                 continue
             b = self.pos(u)
             if b is None:
@@ -567,6 +699,8 @@ class Nascondino(Partita):
 
     def _cattura(self, cerc, u, t):
         gr = self.giro
+        if u in gr["presi"] or u not in gr["nascosti"]:
+            return          # (mai due volte la stessa persona: l'NPC che cerca la riprendeva nello stesso istante)
         gr["presi"].append(u)
         dopo = round(t - gr["inizio_cerca"], 1)
         gr["presi_t"][u] = dopo
@@ -674,16 +808,26 @@ class Nascondino(Partita):
             spots.sort(key=lambda s: -s["coperto"])
             k = max(3, int(len(spots) * (1.0 - n.bravura) * 0.9))
             n.spot = self.rng.choice(spots[:k]) if spots else None
+            # a volte dentro un bidone, un cespuglio o uno scatolone (uno libero, che nessun altro ha scelto)
+            liberi = [i for i, c in enumerate(self.cont) if c["chi"] is None and c["x"] not in presi]
+            if liberi and self.rng.random() < 0.45:
+                i = self.rng.choice(liberi)
+                c = self.cont[i]
+                n.spot = {"x": c["x"], "z": c["z"], "verso": c["yaw"], "tipo": "cont", "coperto": 1.0, "cont": i}
             if n.spot:
                 n.vai((n.spot["x"], n.spot["z"]), 4.4, "run")
             n.stato = "va"
         if n.stato == "va":
             if n.muovi(dt):
                 n.stato = "nascosto"
+                if n.spot and n.spot.get("cont") is not None and self._entra(n.uid, int(n.spot["cont"])):
+                    return
                 if n.spot:
                     n.yaw = n.spot["verso"] + math.pi
                 n.anim = "accucciato" if (n.spot and n.spot["tipo"] == "basso") or n.bravura > 0.5 else "appoggiato"
                 n.t_stato = t + self.rng.uniform(6, 14)
+        elif n.stato == "nascosto" and self.dentro_di(n.uid) >= 0:
+            n.anim = "dentro"          # (zitto zitto dentro, finche' non lo aprono)
         elif n.stato == "nascosto" and self.fase == "cerca":
             a = self.pos(self.giro["cercatore"])
             if a is None:
@@ -761,6 +905,19 @@ class Nascondino(Partita):
                 n.muovi(dt)
                 return
         n.bersaglio = None
+        # un bidone, un cespuglio, uno scatolone a portata: ci guarda dentro (i bravi quasi sempre)
+        for i, c in enumerate(self.cont):
+            if i in n.aperti or math.hypot(c["x"] - n.x, c["z"] - n.z) > 1.8:
+                continue
+            n.aperti.add(i)
+            if self.rng.random() < 0.5 + 0.45 * n.bravura:
+                n.anim = "prende"
+                n.yaw = math.atan2(c["x"] - n.x, c["z"] - n.z)
+                self._apri(n.uid, i, t)
+                n.stato = "guarda"
+                n.t_stato = t + 1.2
+                n.path = []
+                return
         if n.stato == "guarda":
             n.anim = "guarda"
             n.yaw += dt * 1.8 * (1 if int(t) % 4 < 2 else -1)
@@ -777,7 +934,8 @@ class Nascondino(Partita):
             # (ci si torna dopo), quella dell'indizio prima di tutte
             ind = getattr(n, "indizio", "")
             best = None
-            for s in self.m.spots:
+            dacontrollare = list(self.m.spots) + [{"x": c["x"], "z": c["z"], "coperto": 1.2} for i, c in enumerate(self.cont) if i not in n.aperti]
+            for s in dacontrollare:
                 key = (round(s["x"], 1), round(s["z"], 1))
                 if key in n.visti:
                     continue
@@ -819,6 +977,10 @@ class Nascondino(Partita):
         if self.fase in ("risultato", "classifica"):
             return
         cerc = gr["cercatore"]
+        # (tempo scaduto: chi era dentro un contenitore esce, salvo)
+        for c in self.cont:
+            if c["chi"] is not None:
+                self._esci(c["chi"])
         dur = max(1.0, gr["durata"])
         passato = (t - gr["inizio_cerca"]) if gr["inizio_cerca"] else 0.0
         salvi = [u for u in gr["nascosti"] if u not in gr["presi"]]

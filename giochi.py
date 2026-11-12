@@ -147,7 +147,35 @@ class Partita:
         return [x for x in self.giocatori.values() if x.via is None]
 
     def lista(self):
-        return [[x.nome, x.punti, x.uid, 0 if x.via is None else 1] for x in sorted(self.giocatori.values(), key=lambda x: -x.punti)]
+        righe = [[x.nome, x.punti, x.uid, 0 if x.via is None else 1] for x in self.giocatori.values()]
+        righe += [[r["nome"], r["punti"], u, 0] for u, r in getattr(self, "rivali", {}).items()]
+        return sorted(righe, key=lambda r: -r[1])
+
+    # -- i rivali NPC (foto, quadrifogli): se in sala si e' in pochi, entrano concorrenti della citta' che giocano
+    # davvero contro di te (il punteggio lo fanno qui, a caso secondo la loro bravura, sugli stessi punti dei giocatori)
+    def rivali_npc(self, quanti):
+        self.rivali = {}
+        for d in self.rng.sample(RIVALI, min(quanti, len(RIVALI))):
+            self.rivali["npc:" + d[0]] = {"nome": d[1], "bravura": d[2], "punti": 0, "colori": 0, "doppi": 0}
+
+    def rivali_tick(self, t):
+        """Una volta al secondo: ognuno dei rivali forse trova qualcosa."""
+        if not getattr(self, "rivali", None) or t - getattr(self, "_rivali_t", 0.0) < 1.0:
+            return
+        self._rivali_t = t
+        pt = self.cfg.get("punti", {})
+        for r in self.rivali.values():
+            b = r["bravura"]
+            if self.gioco == "foto":
+                if self.rng.random() < 0.05 * b:
+                    if r["colori"] < 9 and self.rng.random() < 0.8:
+                        r["colori"] += 1
+                        r["punti"] += pt.get("colore_nuovo", 10) + (pt.get("raro", 15) if self.rng.random() < 0.07 * b else 0)
+                    elif r["doppi"] < pt.get("doppi_max", 5):
+                        r["doppi"] += 1
+                        r["punti"] += pt.get("doppio", 1)
+            elif self.rng.random() < 0.055 * b:
+                r["punti"] += pt.get("raro", 3) if self.rng.random() < 0.08 else pt.get("normale", 1)
 
     # -- sala
     def aggiungi(self, me, ws):
@@ -159,12 +187,15 @@ class Partita:
     def sala(self):
         resta = None if self.parte is None else max(0, round(self.parte - time.time()))
         self.tutti({"a": "sala", "nome": self.cfg.get("nome", self.gioco), "giocatori": [[x.nome, x.uid] for x in self.giocatori.values()],
-                    "min": 1 if self.prova else self.cfg.get("min", 2), "max": self.cfg.get("max", 10), "parte_tra": resta, "prova": self.prova})
+                    "min": 1, "giusti": self.cfg.get("min", 2), "max": self.cfg.get("max", 10), "parte_tra": resta, "prova": self.prova,
+                    "npc": True})
 
     def tick(self, t):
         if self.stato == "attesa":
             n = len(self.presenti())
-            need = 1 if self.prova else self.cfg.get("min", 2)
+            # (si parte anche da soli: l'attesa lascia tempo agli altri di entrare, e chi manca lo fanno gli NPC.
+            # L'utente: "mettiamo solo partecipa e se manca gente riempi con npc")
+            need = 1
             if n < need:
                 if self.parte is not None:
                     self.parte = None
@@ -188,6 +219,7 @@ class Partita:
                 self.stato = "fine"
                 self.chiusa = t
                 return
+            self.rivali_tick(t)
             self.gioca(t)
             if self.stato == "via" and t - self._stato_t >= 1.0:
                 self._stato_t = t
@@ -217,20 +249,22 @@ class Partita:
     def termina(self):
         self.stato = "fine"
         self.chiusa = time.time()
-        cl = sorted(self.giocatori.values(), key=lambda x: -x.punti)
+        cl = self.lista()          # (con i rivali NPC: il posto si conta tra tutti)
         premi = CFG.get("premi", {}).get(self.gioco, {})
-        pos = 0
-        last = None
-        for i, gioc in enumerate(cl):
-            if last is None or gioc.punti != last:
-                pos = i + 1
-                last = gioc.punti
+        posti = {}
+        pos, last = 0, None
+        for i, r in enumerate(cl):
+            if last is None or r[1] != last:
+                pos, last = i + 1, r[1]
+            posti[r[2]] = pos
+        for gioc in self.giocatori.values():
+            pos = posti.get(gioc.uid, 0)
             mio = {}
-            if not self.prova and len(self.giocatori) >= self.cfg.get("min", 2) and gioc.punti > 0:
+            if not self.prova and gioc.punti > 0:
                 mio = dict(premi.get("tutti", {}))
                 mio.update(premi.get(str(pos), {}))
-            self.manda(gioc, {"a": "fine", "classifica": self.lista(), "posto": pos, "premi": mio, "extra": self.extra_fine(gioc)})
-        self.g.log("fine", self.gioco, self.id, [(x.nome, x.punti) for x in cl])
+            self.manda(gioc, {"a": "fine", "classifica": cl, "posto": pos, "premi": mio, "extra": self.extra_fine(gioc)})
+        self.g.log("fine", self.gioco, self.id, [(r[0], r[1]) for r in cl])
 
     def extra_fine(self, gioc):
         return {}
@@ -275,6 +309,8 @@ class FotoNatura(Partita):
                 t0 += vita + self.rng.uniform(1, 6)
         for gioc in self.giocatori.values():
             gioc.dati = {"colori": {}, "doppi": 0, "album": []}
+        if not self.prova and len(self.giocatori) < 3:
+            self.rivali_npc(3 - len(self.giocatori))
         self.tutti(dict(self.dati_via(None), a="via"))
         self.g.log("via foto", self.id, self.stagione, len(self.insetti), "insetti", len(self.giocatori), "giocatori")
 
@@ -517,6 +553,8 @@ class Quadrifogli(Partita):
         self.zona_q = prato.in_zona(cfg["zona"])
         for gioc in self.giocatori.values():
             gioc.dati = {"trovati": 0, "rari": 0}
+        if not self.prova and len(self.giocatori) < 3:
+            self.rivali_npc(3 - len(self.giocatori))
         self.tutti(dict(self.dati_via(None), a="via"))
         self.g.log("via quadrifogli", self.id, len(self.zona_q), "nel prato")
 
@@ -557,6 +595,9 @@ class Quadrifogli(Partita):
 
 # ------------------------------------------------------------------------------------------ 3. rigori al Talvera
 NPC = "npc"
+# I rivali NPC di foto e quadrifogli: [id, nome, bravura] (nomi inventati, mai di persone vere)
+RIVALI = [["girandola", "Girandola", 0.85], ["mirtillo", "Mirtillo", 0.7], ["zampa", "Zampa Lesta", 0.95], ["briciola", "Briciola", 0.6],
+          ["frullo", "Frullo", 0.8], ["pepita", "Pepita", 0.75]]
 
 # -- la fisica del pallone (coordinate del campo: u verso la porta dei rigori, v di traverso, h in alto; metri, secondi)
 # Deterministica: con lo stesso tiro e lo stesso portiere viene sempre uguale. Il gioco mostra la traiettoria che manda
