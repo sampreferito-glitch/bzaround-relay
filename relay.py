@@ -124,22 +124,52 @@ def dist2(a, b):
 def reckon(peers):
     """Who each new game sees moving: the k closest within NEAR (one already seen stays until FAR). Who comes is sent
     their last movement at once, who goes is announced as far."""
-    items = list(peers.items())
-    for ws, me in items:
+    # (the same as measuring dist2 between every two players, done cheaper: each one's place once, and in town only
+    # the players of the 3x3 cells of FAR metres around, since nobody farther than FAR can be seen)
+    far2, near2 = FAR * FAR, NEAR * NEAR
+    cells = {}             # place -> [players]; town: (cell x, cell z) -> [players]
+    rows = []
+    for i, (ws, me) in enumerate(peers.items()):
+        pl = place(me["w"])
+        if pl is None:
+            rows.append((ws, me, None, None))
+            continue
+        if pl == "town":
+            key = (math.floor(me["x"] / FAR), math.floor(me["z"] / FAR))
+            cells.setdefault(key, []).append((i, ws, me, me["x"], me["z"], me["id"]))
+        else:
+            key = None
+            cells.setdefault(pl, []).append((i, ws, me, 0.0, 0.0, me["id"]))
+        rows.append((ws, me, pl, key))
+    for ws, me, pl, key in rows:
         if me["v"] < 2:
             continue
         cand = []
-        for ows, o in items:
-            if ows is ws:
-                continue
-            d = dist2(me, o)
-            if d is None:
-                continue
-            seen = o["id"] in me["sees"]
-            if d <= (FAR * FAR if seen else NEAR * NEAR):
-                # (who is already seen counts a little closer: two at the same distance don't swap places every turn)
-                cand.append((d * (0.8 if seen else 1.0), o["id"], o))
-        cand.sort(key=lambda c: c[0])
+        sees = me["sees"]
+        if pl is not None:
+            if key is None:
+                near = cells[pl]
+                town = False
+            else:
+                cx, cz = key
+                near = [r for gx in (cx - 1, cx, cx + 1) for gz in (cz - 1, cz, cz + 1) for r in cells.get((gx, gz), ())]
+                town = True
+            x, z = me["x"], me["z"]
+            for i, ows, o, ox, oz, oid in near:
+                if ows is ws:
+                    continue
+                if town:
+                    dx = x - ox
+                    dz = z - oz
+                    d = dx * dx + dz * dz
+                else:
+                    d = 0.0
+                seen = oid in sees
+                if d <= (far2 if seen else near2):
+                    # (who is already seen counts a little closer: two at the same distance don't swap places every turn)
+                    cand.append((d * (0.8 if seen else 1.0), i, oid, o))
+        cand.sort(key=lambda c: (c[0], c[1]))      # (ties in the order of the room, as before)
+        cand = [(c[0], c[2], c[3]) for c in cand]
         want = {c[1] for c in cand[:me["k"]]}
         for c in cand[:me["k"]]:
             if c[1] not in me["sees"] and c[2]["p"] and GIOCHI.vede(me, c[2]):
@@ -154,6 +184,17 @@ def reckon(peers):
 
 
 WATCH = {}             # player id -> the new games that see them move
+V1 = {}                # room -> the older games in it (they get everyone's movement): kept on arrive/upgrade/leave
+SLOW = set()           # games whose outgoing buffer is long: they skip movement until it drains (near_loop)
+SLOW_BYTES = 64 * 1024        # (about a second and a half of movement for a game behind a slow link)
+DEAD_BYTES = 1024 * 1024      # (no game reads this far behind: the connection is dropped, it reconnects)
+
+
+def backlog(ws):
+    try:
+        return ws.transport.get_write_buffer_size()
+    except Exception:      # noqa: BLE001  (closing: no transport)
+        return 0
 
 
 def send(ws, out):
@@ -176,6 +217,20 @@ async def near_loop():
     while True:
         await asyncio.sleep(NEAR_DT)
         now = time.time()
+        # (broadcast never waits for a slow reader: its buffer would grow without end. Movement is skipped for it, the
+        # rest still goes; one that is hopelessly behind is cut and comes back)
+        SLOW.clear()
+        for peers in list(ROOMS.values()):
+            for ws in list(peers):
+                try:
+                    b = backlog(ws)
+                    if b > DEAD_BYTES:
+                        log("troppo indietro", peers[ws]["id"], b, "byte: chiuso")
+                        ws.transport.abort()      # (its handler ends as for a lost signal: the usual goodbye)
+                    elif b > SLOW_BYTES:
+                        SLOW.add(ws)
+                except Exception as e:      # noqa: BLE001
+                    log("vicini: errore", repr(e))
         for peers in list(ROOMS.values()):
             try:
                 reckon(peers)
@@ -250,6 +305,8 @@ async def handler(ws):
     # (the last one may have left the room while this one was arriving: put the room back)
     peers = ROOMS.setdefault(room, peers)
     peers[ws] = me
+    if version < 2:
+        V1.setdefault(room, set()).add(ws)
     try:
         await ws.send(json.dumps({"t": "you", "id": me["id"], "n": len(peers)}))
         if version >= 2:
@@ -319,6 +376,7 @@ async def handler(ws):
                 me["k"] = max(1, min(K_MAX, k))
                 if v >= 2 and me["v"] < 2:
                     me["v"] = v
+                    V1.get(room, set()).discard(ws)
                     send(ws, map_of(peers))      # (from now on: the map, and the movement of the closest only)
                     # until now it was sent everyone's movement: count them as seen, the next reckoning sends "far" to the extra
                     for ows, o in peers.items():
@@ -340,10 +398,18 @@ async def handler(ws):
                 to = [w for w in peers if w is not ws]
             else:
                 # movement and bubbles: the older games all of it, the new ones only from who they see
-                to = [w for w, o in peers.items() if w is not ws and o["v"] < 2] + [w for w in WATCH.get(me["id"], ()) if w in peers]
-                # (il nascondino: il cercatore non riceve chi non vede)
+                # (the older ones from the room's own set, not by looking at every player for every movement)
+                to = [w for w in V1.get(room, ()) if w is not ws]
+                watch = WATCH.get(me["id"])
+                if watch:
+                    to += [w for w in watch if w in peers]
+                if SLOW and t == "p":
+                    # (a game whose link can't keep up skips movement for a moment: the next one is newer anyway)
+                    to = [w for w in to if w not in SLOW]
+                # (il nascondino: il cercatore non riceve chi non vede; chiesto solo se un nascondino e' in corso)
                 try:
-                    to = [w for w in to if GIOCHI.vede(peers[w], me)]
+                    if GIOCHI.nascondino_in_corso():
+                        to = [w for w in to if GIOCHI.vede(peers[w], me)]
                 except Exception as e:      # noqa: BLE001
                     log("giochi: errore", repr(e))
             websockets.broadcast(to, out)
@@ -356,6 +422,12 @@ async def handler(ws):
         except Exception as e:
             log("giochi: errore", repr(e))
         peers.pop(ws, None)
+        SLOW.discard(ws)
+        v1 = V1.get(room)
+        if v1 is not None:
+            v1.discard(ws)
+            if not v1:
+                V1.pop(room, None)
         WATCH.pop(me["id"], None)
         for oid in me["sees"]:
             WATCH.get(oid, set()).discard(ws)
@@ -372,7 +444,12 @@ async def handler(ws):
 
 async def main():
     port = int(os.environ.get("PORT", "8080"))
-    async with websockets.serve(handler, "0.0.0.0", port, max_size=MAX_MSG * 2, ping_interval=20):
+    # compression=None: per-message deflate cost the processor once per recipient for every frame (the same movement
+    # compressed 24 times over), for short JSON that barely shrinks. A client that offers it simply doesn't get it:
+    # the extension is optional in the handshake and every websocket client works without it. The price is bandwidth
+    # to the browser games (the only ones that ask for it): RELAY_DEFLATE=1 in the environment brings it back.
+    deflate = "deflate" if os.environ.get("RELAY_DEFLATE") == "1" else None
+    async with websockets.serve(handler, "0.0.0.0", port, max_size=MAX_MSG * 2, ping_interval=20, compression=deflate):
         print("bzaround relay on port", port, flush=True)
         asyncio.create_task(map_loop())
         asyncio.create_task(near_loop())

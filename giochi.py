@@ -759,6 +759,8 @@ def simula_tiro(vel, eff, kp=None, rng=None, solidi=True, fino_linea=False):
                     out["tocco"] = round(t, 3)
                     # mano debole: le botte piu' forti a volte passano lo stesso
                     weak = max(0.0, min(0.55, (sp - 12.0) / 9.0))
+                    if kp.get("giusto"):
+                        weak *= 0.25          # (il portiere che ha indovinato la parte: le botte le tiene quasi tutte)
                     if rng is not None and rng.random() < weak:
                         passata = True
                         vu *= 0.8
@@ -818,11 +820,44 @@ def _tipo(side, dh):
     return "tuffo" if side > 0.5 else ("salto" if dh > 1.2 else "piedi")
 
 
-def piano_umano(tuffo, v0):
-    """Il portiere giocatore: si tuffa dove ha scelto (x: +-1 i pali, y: 0 a terra, 1 la traversa), appena parte il tiro."""
-    dv, dh = _reach(v0, tuffo["x"] * R_HALF, 0.15 + tuffo["y"] * 1.65)
+def _zona(x):
+    """La parte scelta dal portiere (x: -1..1 tra i pali): -1 sinistra, 0 centro, 1 destra."""
+    return 1 if x > 0.33 else (-1 if x < -0.33 else 0)
+
+
+def piano_umano(tuffo, v0, vel=None, eff=0.0, rng=None):
+    """Il portiere giocatore, come nei giochi di calcio (FIFA): sceglie solo la parte (sinistra, centro, destra; alto o
+    basso e' solo l'intenzione) mentre l'altro prende la rincorsa. Se il pallone va da quella parte le mani vanno
+    davvero sul pallone, in tempo: parata (quasi sempre). Se va dall'altra, si tuffa a vuoto dove aveva scelto.
+    Senza il tiro (vel None: i collaudi di prima) si tuffa al punto scelto."""
+    zona = _zona(tuffo["x"])
+    gv, gh = zona * 1.15, 0.15 + tuffo["y"] * 1.65
+    giusto = False
+    t0 = 0.05
+    t_linea = None
+    if vel is not None:
+        r = simula_tiro(vel, eff, solidi=False, fino_linea=True)
+        if r["linea"] is not None:
+            t_linea, lv, lh = r["linea"]
+            # (generosi: la parte giusta conta anche un po' oltre il confine tra le zone)
+            if zona == 0:
+                giusto = abs(lv) < 0.8
+            else:
+                giusto = lv * zona > 0.2
+            if giusto and abs(lv) < R_HALF + 0.35 and lh < R_ALTA + 0.25:
+                gv, gh = lv, lh
+                # all'incrocio dei pali, ogni tanto, non ci si arriva per un palmo: il tiro perfetto resta gol
+                if rng is not None and abs(lv) > 1.2 and lh > 1.3 and rng.random() < 0.4:
+                    gv, gh = lv * 0.82, lh - 0.3
+            else:
+                giusto = False
+    dv, dh = _reach(v0, gv, gh)
     side = abs(dv - v0)
-    return {"v0": v0, "t0": 0.05, "dur": round(0.26 + 0.32 * side / 2.2, 3), "dest": [round(dv, 3), round(dh, 3)], "tipo": _tipo(side, dh)}
+    dur = 0.26 + 0.32 * side / 2.2
+    if giusto and t_linea is not None:
+        # le mani arrivano sul pallone un attimo prima che passi (anche sulle botte)
+        dur = max(0.12, min(dur, t_linea - t0 - 0.05))
+    return {"v0": v0, "t0": t0, "dur": round(dur, 3), "dest": [round(dv, 3), round(dh, 3)], "tipo": _tipo(side, dh), "giusto": giusto}
 
 
 def piano_npc(vel, eff, v0, storia, rng):
@@ -870,7 +905,7 @@ def calcia(tiro, tuffo, storia, rng):
     ty = float(tiro.get("y", 0.3)) + rng.gauss(0, err * 0.8) + max(0.0, pot - 0.82) * 1.8
     vel = mira_tiro(tx, ty, pot, eff, alz)
     v0 = round(rng.uniform(-0.25, 0.25), 3)
-    kp = piano_umano(tuffo, v0) if tuffo is not None else piano_npc(vel, eff, v0, storia, rng)
+    kp = piano_umano(tuffo, v0, vel, eff, rng) if tuffo is not None else piano_npc(vel, eff, v0, storia, rng)
     r = simula_tiro(vel, eff, kp, rng)
     linea = r["linea"]
     if r["dentro"]:
@@ -1195,6 +1230,10 @@ class Giochi:
                     return False
         return True
 
+    def nascondino_in_corso(self):
+        """C'e' un nascondino in corso? Se no, vede() e' sempre vero: il relay non lo chiede per ogni destinatario."""
+        return any(p.gioco == "nascondino" and p.stato == "via" for p in self.partite.values())
+
     def fuori_mappa(self):
         out = set()
         for p in self.partite.values():
@@ -1221,6 +1260,10 @@ class Giochi:
         if ws is not None:
             self.prato.via(room, ws)
         if p is None:
+            return
+        if ws is not None and p.giocatori[uid].ws is not ws:
+            # (a stale close: the old socket of one who has already come back on a new one, and taken their place in
+            # the match with "entra"; it timed out only now and must not take them out again)
             return
         if p.stato == "attesa":
             p.giocatori.pop(uid, None)
