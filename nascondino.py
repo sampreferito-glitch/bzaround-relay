@@ -1042,11 +1042,13 @@ class Nascondino(Partita):
         for gioc in self.giocatori.values():
             p = posti.get(gioc.uid, 0)
             mio = {}
+            esito = None
             if len(self.storia) >= 1 and self.punti.get(gioc.uid, 0) > 0:
                 mio = dict(premi.get("tutti", {}))
                 mio.update(premi.get(str(p), {}))
-            self.manda(gioc, {"a": "fine", "classifica": cl, "posto": p, "premi": mio,
-                              "extra": {"giri": len(self.storia), "punti": self.punti.get(gioc.uid, 0)}})
+                esito = __import__("giochi").esito_posto(p, premi)
+            self.manda(gioc, dict({"a": "fine", "classifica": cl, "posto": p, "premi": mio,
+                                   "extra": {"giri": len(self.storia), "punti": self.punti.get(gioc.uid, 0)}}, **self.ricevuta(gioc, esito)))
         self.g.log("fine", self.gioco, self.id, cl)
 
     # -- chi entra a sessione iniziata
@@ -1071,6 +1073,6 @@ class Nascondino(Partita):
         return gioc
 
     def rientra(self, gioc, me, ws):
-        gioc.me, gioc.ws, gioc.via = me, ws, None
+        self.riprendi(gioc, me, ws)
         if self.stato == "via":
             self.manda(gioc, dict(self.dati_via(gioc), a="via", rientro=True))

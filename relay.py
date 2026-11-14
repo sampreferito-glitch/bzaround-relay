@@ -2,6 +2,7 @@
 
 Each client sends small JSON messages:
   {"t": "hi", "name": "...", "look": {...}}          once, on joining (and again when the look changes)
+      optional "acc": the account id (32 hex chars) for the prize receipts of the minigames: kept on the connection, never passed on
   {"t": "p", "x": .., "y": .., "z": .., "r": .., "a": "walk", "w": "town"}   about ten times a second
   {"t": "e", "chat": "..."}                           a speech bubble
   {"t": "g", "a": ...}                                the minigames (server/giochi.py): handled here, never relayed
@@ -369,6 +370,10 @@ async def handler(ws):
                 if name != me["name"]:
                     log("nome", me["id"], repr(name))
                 me["name"] = name
+                # (l'account dichiarato per le ricevute dei premi: resta qui, non va mai agli altri giocatori)
+                acc = msg.pop("acc", None)
+                if isinstance(acc, str) and re.fullmatch(r"[0-9a-fA-F]{32}", acc):
+                    me["acc"] = acc.lower()
                 if not me.get("uid"):
                     # (the id the minigames know a player by, to come back to a match after a lost signal; it never changes once set)
                     me["uid"] = clean_uid(msg.get("uid"))

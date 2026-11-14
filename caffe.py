@@ -896,9 +896,11 @@ class Caffe(Partita):
         mio = dict(premi_cfg.get(str(stelle), {})) if (not self.prova or stelle >= 1) and self.stat["serviti"] > 0 else {}
         if self.prova:
             mio = {}
+        esito = "stelle%d" % stelle if mio and stelle >= 1 else None      # (come i premi: uguale per tutta la squadra)
         for gioc in self.giocatori.values():
             gioc.punti = self.team
-            self.manda(gioc, {"a": "fine", "classifica": self.lista(), "posto": 1 if stelle >= 2 else 0, "premi": mio, "extra": self.extra_fine(gioc)})
+            self.manda(gioc, dict({"a": "fine", "classifica": self.lista(), "posto": 1 if stelle >= 2 else 0, "premi": mio, "extra": self.extra_fine(gioc)},
+                                  **self.ricevuta(gioc, esito)))
         self.g.log("fine", self.gioco, self.id, "stelle", stelle, self.stat)
 
     def lista(self):

@@ -104,7 +104,7 @@
   "dopo_primo": 45.0, "dopo_umani": 25.0, "massimo": 420.0, "premi": 18.0
  },
  "premi": {
-  "_": "Ogni premio e' solo estetico o una comodita' di casa: niente vantaggi nei giochi. 'monete' valgono solo se nel gioco i soldi sono accesi.",
+  "_": "Ogni premio e' solo estetico o una comodita' di casa: niente vantaggi nei giochi. 'monete' restano solo per i vecchi client: non sono piu' la fonte del premio in denaro, i Tirolini li decide il Worker da data/economia.json (attivita.minigiochi) su ricevuta firmata dal relay (fine: ricevuta e mac).",
   "foto": {
    "1": {"monete": 300, "titolo": "Fotografo del Talvera", "adesivo": "farfalla_doro"},
    "2": {"monete": 200, "adesivo": "farfalla_argento"},

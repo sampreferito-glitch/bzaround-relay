@@ -237,9 +237,12 @@ class Ballo(Partita):
         for gioc in self.giocatori.values():
             p = posti.get(gioc.uid, 0)
             mio = {}
+            esito = None
             if gioc.punti > 0:
                 mio = dict(premi.get("tutti", {}))
                 mio.update(premi.get(str(p), {}))
-            self.manda(gioc, {"a": "fine", "classifica": cl, "posto": p, "premi": mio,
-                              "extra": {"diff": self.diff, "max_combo": gioc.dati.get("max_combo", 0), "giudizi": gioc.dati.get("giudizi", {})}})
+                esito = __import__("giochi").esito_posto(p, premi)
+            self.manda(gioc, dict({"a": "fine", "classifica": cl, "posto": p, "premi": mio,
+                                   "extra": {"diff": self.diff, "max_combo": gioc.dati.get("max_combo", 0), "giudizi": gioc.dati.get("giudizi", {})}},
+                                  **self.ricevuta(gioc, esito)))
         self.g.log("fine", self.gioco, self.id, cl)

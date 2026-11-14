@@ -24,14 +24,19 @@ li'), "preso", "turno" (rigori), e fuori dalle partite "q_vicini" ({"nuovi": [[i
 "q_tolto" ({"id", "chi"}), "q_trovato" / "q_no" ({"id", "raro", "motivo"}), "fine" (classifica e premi di ciascuno), "errore".
 Ogni messaggio porta "now": i secondi dall'inizio della partita, l'orologio comune.
 """
+import functools
+import hashlib
+import hmac
 import json
 import math
 import os
 import random
 import time
+import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GIOCHI = ("foto", "quadrifogli", "rigori", "sfilata", "caffe", "nascondino", "ballo", "gara")
+RICEVUTA_SEC = 24 * 3600   # una ricevuta di premio vale un giorno: il gioco la presenta al Worker (account/) per incassare
 REJOIN = 45.0            # secondi per rientrare in una partita dopo una disconnessione
 POS_STALE = 3.0          # una posizione piu' vecchia di cosi' non basta per convalidare un'azione
 
@@ -106,14 +111,58 @@ class Giocatore:
         self.nome = (me.get("name") or "Viaggiatore")[:20]
         self.me = me
         self.ws = ws
+        self.acc = me.get("acc") or ""      # l'account con cui e' entrato: la ricevuta e' sua, e solo sua (vuoto: nessuna ricevuta)
         self.punti = 0
         self.via = None          # quando si e' disconnesso
         self.ultimo = 0.0        # l'ultima azione (per non inondare)
         self.dati = {}
 
 
+_MERITO = {"primo": 0, "stelle3": 0, "secondo": 1, "stelle2": 1, "terzo": 2, "stelle1": 2, "partecipazione": 3}
+
+
+def _avvolgi_termina(orig):
+    """termina() di ogni gioco: i messaggi "fine" restano in coda e partono alla fine, quando si sa quale posto di ciascun
+    account e' il migliore (una sola ricevuta per account e partita; a pari merito il primo posto)."""
+    @functools.wraps(orig)
+    def termina(self, *a, **k):
+        esterna = getattr(self, "_fine_buf", None) is None
+        if esterna:
+            self._fine_buf = []
+        try:
+            return orig(self, *a, **k)
+        finally:
+            if esterna:
+                coda, self._fine_buf = self._fine_buf, None
+                migliore = {}
+                for i, (gioc, msg) in enumerate(coda):
+                    r = msg.get("ricevuta")
+                    if r:
+                        m = (_MERITO.get(r["esito"], 9), i)
+                        if r["acc"] not in migliore or m < migliore[r["acc"]][0]:
+                            migliore[r["acc"]] = (m, i)
+                for i, (gioc, msg) in enumerate(coda):
+                    r = msg.get("ricevuta")
+                    if r and migliore[r["acc"]][1] != i:
+                        msg = {k: v for k, v in msg.items() if k not in ("ricevuta", "mac")}
+                    self.manda(gioc, msg)
+    return termina
+
+
+def esito_posto(pos, premi):
+    """L'esito di un posto in classifica (stesse regole dei premi): primo, secondo, terzo solo se il gioco ha un terzo premio
+    (i rigori hanno solo due posti), altrimenti partecipazione."""
+    nome = {1: "primo", 2: "secondo", 3: "terzo"}.get(pos)
+    return nome if nome and str(pos) in premi else "partecipazione"
+
+
 class Partita:
     gioco = ""
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        if "termina" in cls.__dict__:
+            cls.termina = _avvolgi_termina(cls.__dict__["termina"])
 
     def __init__(self, giochi, room, prova=False):
         self.g = giochi
@@ -121,6 +170,8 @@ class Partita:
         self.prova = prova
         self.cfg = CFG.get(self.gioco, {})
         self.id = next(giochi.ids)
+        self.codice = uuid.uuid4().hex      # l'id della partita nelle ricevute: unico anche dopo un riavvio del relay
+        self._ricevute = set()
         self.stato = "attesa"
         self.giocatori = {}      # uid -> Giocatore
         self.parte = None        # quando parte (server)
@@ -135,6 +186,9 @@ class Partita:
         return round(time.time() - self.inizio, 3) if self.stato != "attesa" else 0.0
 
     def manda(self, gioc, msg):
+        if msg.get("a") == "fine" and getattr(self, "_fine_buf", None) is not None:
+            self._fine_buf.append((gioc, msg))      # (si manda tutto insieme alla fine di termina(), vedi _chiudi_fine)
+            return
         if gioc.via is None:
             msg = dict(msg, t="g", id=self.id, gioco=self.gioco, now=self.now())
             self.g.send(gioc.ws, json.dumps(msg))
@@ -227,8 +281,15 @@ class Partita:
             if self.fine_t and t >= self.fine_t and self.stato == "via":
                 self.termina()
 
-    def rientra(self, gioc, me, ws):
+    def riprendi(self, gioc, me, ws):
+        """Il posto passa a una connessione nuova. Se l'account dichiarato e' un altro (o manca), si puo' giocare lo stesso ma
+        il posto non avra' piu' la ricevuta."""
+        if (me.get("acc") or "") != gioc.acc:
+            gioc.acc = ""
         gioc.me, gioc.ws, gioc.via = me, ws, None
+
+    def rientra(self, gioc, me, ws):
+        self.riprendi(gioc, me, ws)
         if self.stato == "via":
             self.manda(gioc, dict(self.dati_via(gioc), a="via", rientro=True))
 
@@ -245,6 +306,27 @@ class Partita:
     def azione(self, gioc, msg, t):
         pass
 
+    # -- la ricevuta del premio (i Tirolini li decide il Worker): firmata col segreto ECO_RICEVUTE, una per posto, mai senza account
+    # NB: anche una partita da soli contro gli NPC (non di prova) da' la ricevuta, e' voluto: il freno e' il tetto comune
+    # del Worker (500 al giorno, 1500 alla settimana). Una sola ricevuta per account e partita: la tiene il posto migliore.
+    def ricevuta(self, gioc, esito):
+        """I campi "ricevuta" e "mac" da aggiungere al messaggio "fine" di un giocatore vero, o {} se non spetta: partita di
+        prova, nessun esito, nessun segreto in ambiente, account non dichiarato, giocatore uscito, gia' data a questo posto."""
+        segreto = os.environ.get("ECO_RICEVUTE", "")
+        if not esito or self.prova or not segreto or gioc.via is not None:
+            return {}
+        acc = gioc.acc
+        uid = gioc.uid
+        if not acc or uid in self._ricevute or self.giocatori.get(uid) is not gioc:
+            return {}
+        self._ricevute.add(uid)
+        posto = list(self.giocatori).index(uid)
+        rid = "%s:%d" % (self.codice, posto)
+        scad = int(time.time()) + RICEVUTA_SEC
+        testo = "v1|" + rid + "|" + self.gioco + "|" + esito + "|" + acc + "|" + str(scad)
+        mac = hmac.new(segreto.encode("utf8"), testo.encode("utf8"), hashlib.sha256).hexdigest()
+        return {"ricevuta": {"v": 1, "id": rid, "gioco": self.gioco, "esito": esito, "acc": acc, "scad": scad}, "mac": mac}
+
     # -- la fine: classifica e premi (decisi qui)
     def termina(self):
         self.stato = "fine"
@@ -260,10 +342,12 @@ class Partita:
         for gioc in self.giocatori.values():
             pos = posti.get(gioc.uid, 0)
             mio = {}
+            esito = None
             if not self.prova and gioc.punti > 0:
                 mio = dict(premi.get("tutti", {}))
                 mio.update(premi.get(str(pos), {}))
-            self.manda(gioc, {"a": "fine", "classifica": cl, "posto": pos, "premi": mio, "extra": self.extra_fine(gioc)})
+                esito = esito_posto(pos, premi)
+            self.manda(gioc, dict({"a": "fine", "classifica": cl, "posto": pos, "premi": mio, "extra": self.extra_fine(gioc)}, **self.ricevuta(gioc, esito)))
         self.g.log("fine", self.gioco, self.id, [(r[0], r[1]) for r in cl])
 
     def extra_fine(self, gioc):
@@ -1108,6 +1192,8 @@ class Rigori(Partita):
         return {"gol": gioc.dati.get("gol", 0), "parate": gioc.dati.get("parate", 0), "vince": [self.in_gara[0], self.nome(self.in_gara[0])] if len(self.in_gara) == 1 else None}
 
 
+Partita.termina = _avvolgi_termina(Partita.termina)
+
 TIPI = {"foto": FotoNatura, "quadrifogli": Quadrifogli, "rigori": Rigori}
 
 # I minigiochi del centro storico, ognuno nel suo modulo (server/sfilata.py, server/caffe.py): ognuno importa da qui
@@ -1179,6 +1265,9 @@ class Giochi:
                 return self.send(ws, json.dumps({"t": "g", "a": "errore", "motivo": "gioco"}))
             if p is not None:
                 g = p.giocatori[uid]
+                if g.via is None and g.ws is not ws and g.acc and (me.get("acc") or "") != g.acc:
+                    # (l'uid lo sanno tutti: chi ha il posto ancora connesso non lo perde per un altro account)
+                    return self.send(ws, json.dumps({"t": "g", "a": "errore", "motivo": "occupato"}))
                 if g.via is not None or g.ws is not ws:
                     p.rientra(g, me, ws)          # (rientro dopo una disconnessione: stessa partita, stessi punti)
                     p.sala() if p.stato == "attesa" else None

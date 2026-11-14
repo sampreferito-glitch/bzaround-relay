@@ -756,10 +756,13 @@ class Sfilata(Partita):
             r = gioc.dati.get("riga")
             pos = r["posto"] if r else 0
             mio = {}
+            esito = None
             if r and len(self.ordine) >= 2:
                 mio = dict(premi.get("tutti", {}))
                 mio.update(premi.get(str(pos), {}))
-            self.manda(gioc, {"a": "fine", "classifica": self.lista(), "posto": pos, "premi": mio, "extra": self.extra_fine(gioc)})
+                esito = __import__("giochi").esito_posto(pos, premi)
+            self.manda(gioc, dict({"a": "fine", "classifica": self.lista(), "posto": pos, "premi": mio, "extra": self.extra_fine(gioc)},
+                                  **self.ricevuta(gioc, esito)))
         self.g.log("fine", self.gioco, self.id, [(x["nome"], x["finale"]) for x in self.classifica])
 
     def extra_fine(self, gioc):

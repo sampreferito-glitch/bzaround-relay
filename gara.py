@@ -434,12 +434,14 @@ class Gara(Partita):
             c = self.corridori.get(gioc.uid) if hasattr(self, "corridori") else None
             pos = c.posto if c else 0
             mio = {}
+            esito = None
             if c and c.arrivo is not None and len(self.corridori) >= 2:
                 mio = dict(premi.get("tutti", {}))
                 mio.update(premi.get(str(pos), {}))
+                esito = __import__("giochi").esito_posto(pos, premi)
             gioc.punti = int(round(c.arrivo * 100)) if c and c.arrivo is not None else 0
-            self.manda(gioc, {"a": "fine", "classifica": self.lista(), "posto": pos if c and c.arrivo is not None else 0,
-                              "premi": mio, "extra": {"gara": cl, "giri": self.giri, "mio": gioc.uid}})
+            self.manda(gioc, dict({"a": "fine", "classifica": self.lista(), "posto": pos if c and c.arrivo is not None else 0,
+                                   "premi": mio, "extra": {"gara": cl, "giri": self.giri, "mio": gioc.uid}}, **self.ricevuta(gioc, esito)))
         self.g.log("fine", self.gioco, self.id, [(r["nome"], r["tempo"]) for r in cl])
 
 
